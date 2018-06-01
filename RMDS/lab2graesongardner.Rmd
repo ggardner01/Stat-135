@@ -1,0 +1,118 @@
+
+library(ggplot2)
+cmvlength = 229354
+```{r}
+
+ggplot(hcmv, aes(location)) +
+  geom_density(adjust=.1)+ 
+  geom_hline(yintercept=1/cmvlength) + xlab("position of palidrome") + ggtitle("Distribution of Palindrome Locations")
+
+```
+```{r}
+counts10 = 0[-1]
+inc10=floor(cmvlength/10)
+for(i in 1:10){
+  co = sum(hcmv$location < i*inc10) - sum(counts10)
+  counts10 = c(counts10, co)
+}
+length(hcmv$location)/10
+ev = sum(counts10)/10
+
+ppois(ev,29)
+
+chi1 = 0[-1]
+for(x in counts10){
+  chi1 = c(chi1, ((x-ev)^2)/ev)
+}
+
+sum(chi1) # = 4.13 with 8 df, needed ~15 test statistic to reject null.
+
+plotdf = data.frame(counts10)
+ggplot(plotdf,aes(1:10,counts10) )+ geom_line()+ geom_hline(yintercept=ev)+xlab("Group Number (1-10)")+ylab("Group Count")+ggtitle("Palindrome Counts in Sequential Group")
+
+```
+```{r}
+tab1 = table(counts10)
+tab1
+
+#this sample is much too small for a chi squared test of any meaning.
+```
+```{r}
+#I chose 50 because when the length is modded by this value, it returns 4, meaning we will have minimal data loss(only losing four points), which should not noticebaly affect our resuts.I also tried playing around for a value which allowed the spikes to "stand out," while allowing enough data points for an informative chi squared (near the value the text gave)
+counts50 = 0[-1]
+inc50=floor(cmvlength/50)
+for(i in 1:50){
+  co = sum(hcmv$location < i*inc50) - sum(counts50)
+  counts50 = c(counts50, co)
+}
+lam50 = length(hcmv$location)/50
+ev50 = sum(counts50)/50
+
+
+
+plotdf50 = data.frame(counts50)
+counts50
+
+ggplot(plotdf50,aes(1:50,counts50) )+ geom_line()+ geom_hline(yintercept=ev50)+ylab("Counts when Genome is divided into sequential groups, with 50 groups in total") +xlab("Group Number (1-50)")
+```
+
+```{r}
+#bins for chi test 2 or less, 3, 4, 5, 6, 7, 8, 9, 10 or more
+countsframe =as.data.frame(table(counts50))
+
+bincounts50 = c(1+2+1,countsframe[4:10,"Freq"], 3)
+pcount50 = 50*(c(ppois(2,ev50),dpois(3,ev50),dpois(4,ev50),dpois(5,ev50),dpois(6,ev50),dpois(7,ev50),dpois(8,ev50),dpois(9,ev50),1-ppois(9,ev50)))
+
+pcountcomp50 = 0[-1]
+iy = 0[-1]
+for(i in 0:15){
+  pcountcomp50 = c(pcountcomp50, dpois(i,ev50))
+  iy = c(iy,i)
+}
+poissdf = data.frame(iy,pcountcomp50)
+
+chi2= sum(((bincounts50-pcount50)^2)/pcount50) ## = 3.59
+  #9 baskets, so there will be 7 degrees of freedom (9 baskets - 1 para - 1),
+# a value 6.3 is needed to reject at 50% confidence, so we can not reject that this follows a poisson at any meaningful level.
+
+ggplot(countsframe,aes(counts50,Freq, color = "red") ) + geom_line(group = 1) +labs(x="Number of hits per segment", y="Number Segments", title="Poisson vs Actual Distribution")+ geom_line(data = poissdf, aes(iy,50*pcountcomp50, color = "blue"))+ scale_colour_discrete(name="",labels=c("Poisson","Actual"))
+
+
+1-ppois(14,ev50)^50
+
+out1 = merge(poissdf, countsframe, by.x = "iy", by.y = "counts50", all.x = TRUE)
+out1$pcountcomp50 = out1$pcountcomp50*50
+colnames(out1)=c("Pallindromes","Poisson","Actual" )
+out1
+```
+
+```{r}
+1-ppois(14,ev50)^50
+
+difference1 = diff(hcmv$location)
+lamexp = mean(difference1)
+
+expplot = dexp(1:max(difference1), rate = 1/lamexp)
+
+dfexp = data.frame(expplot)
+diff1 = data.frame(difference1)
+
+
+ggplot() + geom_density(data=diff1, aes(difference1, color= "red"))+geom_line(data = dfexp, aes(1:max(difference1),expplot, color="blue"))+xlab("Distance Between Consecutive Pallindromes")+scale_colour_discrete(name="",labels=c("Exponential","Actual"))
+```
+```{r}
+#we seperate into 5 baskets for our test, 0-500, 500-1000,1000-1500,2000+
+
+
+diffcounts = c(sum(difference1 > 0 & difference1 <= 500),sum(difference1 > 500 & difference1 <= 1000),sum(difference1 > 1000 & difference1 <= 1500),sum(difference1 > 1500 & difference1 <= 2000),sum(difference1 > 2000))
+
+expcounts = length(difference1)*c(pexp(500,rate=1/lamexp),pexp(1000,rate=1/lamexp)-pexp(500,rate=1/lamexp),pexp(1500,rate=1/lamexp)-pexp(1000,rate=1/lamexp),pexp(2000,rate=1/lamexp)-pexp(1500,rate=1/lamexp),1-pexp(2000,rate=1/lamexp))
+
+range= c("0-500","500-1000","1000-1500","1500-2000","2000+")
+out2 = data.frame(range,expcounts,diffcounts)
+colnames(out2)=c("Range","Exponential", "Actual")
+
+chi3= sum(((diffcounts-expcounts)^2)/expcounts) #~ 7.4
+#3 degrees of freedom. The value to reject at 95% confidence for this test is around 7.8 so this is surprisinglng not a good fit.
+```
+
